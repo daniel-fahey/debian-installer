@@ -100,8 +100,8 @@ sector-size: 512
 ${sfdisk_format}
 EOF
 
-notify resize the root partition on ${DISK} to fill available space
-echo ", +" | sfdisk -N ${root_partition_nr} $DISK
+notify resize the root partition on ${DISK} to 532GiB leaving space for Windows
+echo ", +532GiB" | sfdisk -N ${root_partition_nr} $DISK
 
 sfdisk -d $DISK > partitions_created.txt
 fi
@@ -318,6 +318,23 @@ bootctl install
 EOF
 chroot ${target}/ sh /tmp/run1.sh
 
+notify configuring secure boot: WIP
+cp /root/go/bin/sbctl ${target}/bin/
+cat <<EOF > ${target}/tmp/run5.sh
+#!/bin/bash
+sbctl status
+chattr -i /sys/firmware/efi/efivars/{db,KEK}*
+sbctl enroll-keys
+sbctl status
+sbctl verify
+sbctl sign -s /boot/efi/EFI/BOOT/BOOTX64.EFI
+sbctl sign -s /boot/efi/EFI/arch/fwupdx64.efi
+sbctl sign -s /boot/efi/EFI/systemd/systemd-bootx64.efi
+sbctl list-files
+EOF
+# run manually after:
+#chroot ${target}/ sh /tmp/run5.sh
+
 notify checking for tpm
 cp ${KEYFILE} ${target}/
 chmod 600 ${target}/${KEYFILE}
@@ -336,8 +353,11 @@ else
     echo tpm not avaialble
 fi
 EOF
-chroot ${target}/ bash /tmp/run4.sh
-rm ${target}/${KEYFILE}
+# run manually after:
+#chroot ${target}/ bash /tmp/run4.sh
+
+# keep the keyfile:
+#rm ${target}/${KEYFILE}
 
 notify install kernel and firmware on ${target}
 cat <<EOF > ${target}/tmp/packages.txt
@@ -391,17 +411,19 @@ fi
 notify reverting backports apt-pin
 rm -f ${target}/etc/apt/preferences.d/99backports-temp
 
-notify umounting all filesystems
-umount -R ${target}
-umount -R ${top_level_mount}
-if [ ${ENABLE_SWAP} == "true" ]; then
-  swapoff /dev/mapper/${swap_device}
-fi
+# keep mounted:
 
-notify closing luks
-cryptsetup luksClose ${luks_device}
-if [ ${ENABLE_SWAP} == "true" ]; then
-  cryptsetup luksClose /dev/mapper/${swap_device}
-fi
+#notify umounting all filesystems
+#umount -R ${target}
+#umount -R ${top_level_mount}
+#if [ ${ENABLE_SWAP} == "true" ]; then
+#  swapoff /dev/mapper/${swap_device}
+#fi
+#
+#notify closing luks
+#cryptsetup luksClose ${luks_device}
+#if [ ${ENABLE_SWAP} == "true" ]; then
+#  cryptsetup luksClose /dev/mapper/${swap_device}
+#fi
 
 notify "INSTALLATION FINISHED"
